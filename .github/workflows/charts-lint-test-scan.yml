@@ -1,0 +1,250 @@
+name: Lint, test, and scan Helm charts
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: The type of machine to run the job on.
+        type: string
+        required: false
+        default: ubuntu-latest
+      lint-charts:
+        description: Lint and test Helm charts
+        type: boolean
+        required: false
+        default: true
+      test-charts:
+        description: Lint and test Helm charts
+        type: boolean
+        required: false
+        default: false
+      ct-config:
+        description: Chart testing configuration
+        type: string
+        required: false
+      ct-yaml:
+        description: Chart testing configuration file
+        type: string
+        required: false
+        default: ct.yaml
+      ct-yaml-post-script:
+        description: Bash script that runs after the Chart testing configuration file is configured.
+        type: string
+        required: false
+      lint-pre-script:
+        description: Bash script that runs before `ct lint`
+        type: string
+        required: false
+      lint-post-script:
+        description: Bash script that runs after `ct lint`
+        type: string
+        required: false
+      test-pre-script:
+        description: Bash script that runs before `ct install`
+        type: string
+        required: false
+      test-post-script:
+        description: Bash script that runs after `ct install`
+        type: string
+        required: false
+      scan-charts:
+        description: Template charts and scan Kubernetes resources with Snyk
+        type: boolean
+        required: false
+        default: true
+      scan-chart-snyk-args:
+        description: Additional Snyk args when scanning images (e.g., `--severity-threshold=high`)
+        type: string
+        required: false
+      scan-images:
+        description: Scan container images with Snyk
+        type: boolean
+        required: false
+        default: true
+      scan-images-ignore-prefix-list:
+        description: List of image prefixes to ignore when scanning images with Snyk. This field is a JSON array of strings.
+        type: string
+        required: false
+        default: '["dtr.dev.cray.com"]'
+      scan-image-snyk-args:
+        description: Additional Snyk args when scanning images (e.g., `--severity-threshold=high`)
+        type: string
+        required: false
+    secrets:
+      snyk-token:
+        description: Snyk authorization token
+        required: true
+
+jobs:
+  lint-and-test:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      charts: ${{ steps.list-changed.outcome == 'skipped' && steps.list-charts.outputs.charts || steps.list-changed.outputs.charts }}
+      images: ${{ steps.extract-images.outputs.images }}
+    env:
+      CT_CONFIG: ${{ inputs.ct-yaml }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v1.1
+
+      # Python is required because `ct lint` runs Yamale (https://github.com/23andMe/Yamale) and
+      # yamllint (https://github.com/adrienverge/yamllint) which require Python
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+        if: inputs.lint-charts || inputs.test-charts
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.1.0
+        if: inputs.lint-charts || inputs.test-charts
+
+      - name: Configure chart-testing
+        env:
+          INPUTS_CT_CONFIG: ${{ inputs.ct-config }}
+        shell: bash
+        run: |
+          if [[ ! -f "$CT_CONFIG" ]]; then
+            mkdir -p "$(dirname "$CT_CONFIG")"
+            touch "$CT_CONFIG"
+          fi
+          yq eval-all --inplace -P '. as $item ireduce ({}; . * $item )' "$CT_CONFIG" <(echo "target-branch: $GITHUB_BASE_REF") <(echo "$INPUTS_CT_CONFIG")
+          cat "$CT_CONFIG"
+        if: inputs.lint-charts || inputs.test-charts
+
+      - name: Run post configure chart-testing script
+        shell: bash
+        run: ${{ inputs.ct-yaml-post-script }}
+        if: (inputs.lint-charts || inputs.lint-pre-script) && inputs.ct-yaml-post-script
+
+      - name: List changed charts
+        id: list-changed
+        shell: bash
+        run: echo "::set-output name=charts::$(ct list-changed --config "$CT_CONFIG" | jq -R | jq -sc)"
+        if: inputs.lint-charts || inputs.test-charts
+
+      - name: Run pre-lint script
+        shell: bash
+        run: ${{ inputs.lint-pre-script }}
+        if: inputs.lint-charts && inputs.lint-pre-script
+
+      - name: Lint charts
+        run: ct lint --config "$CT_CONFIG"
+        if: inputs.lint-charts
+
+      - name: Run post-lint script
+        shell: bash
+        run: ${{ inputs.lint-post-script }}
+        if: inputs.lint-charts && inputs.lint-post-script
+
+      - name: Create test Kubernetes cluster
+        uses: helm/kind-action@v1.2.0
+        if: inputs.test-charts && fromJSON(steps.list-changed.outputs.charts)[0] != null
+
+      - name: Run pre-test script
+        shell: bash
+        run: ${{ inputs.test-pre-script }}
+        if: inputs.test-charts && inputs.test-pre-script
+
+      - name: Deploy charts to test Kubernetes cluster
+        run: ct install --config "$CT_CONFIG"
+        if: inputs.test-charts
+
+      - name: Run post-test script
+        shell: bash
+        run: ${{ inputs.test-post-script }}
+        if: inputs.test-charts && inputs.test-post-script
+
+      - name: Find all charts (unless linting or testing)
+        id: list-charts
+        shell: bash
+        run: echo "::set-output name=charts::$(yq e '.chart-dirs // ["charts"] | .[]' "$CT_CONFIG" | while read chartdir; do test -d $chartdir || continue; find $chartdir -name Chart.yaml -type f -maxdepth 2 -mindepth 2 -printf '%h\n'; done | jq -R | jq -sc)"
+        if: steps.list-changed.outcome == 'skipped'
+
+      - name: Discover images required by charts
+        id: extract-images
+        env:
+          CHARTS: ${{ steps.list-changed.outcome == 'skipped' && steps.list-charts.outputs.charts || steps.list-changed.outputs.charts }}
+          IMAGES: ${{ runner.temp }}/images.txt
+        shell: bash
+        run: |
+          jq -r '.[]' <<< "$CHARTS" | while read chart; do
+            helm template release "$chart" --dry-run --replace --dependency-update | yq e -N '.. | .image? | select(.)' -
+            helm show chart "$chart" | yq e '.annotations."artifacthub.io/images"' - | yq e -N '.[] | .image' -
+          done | sort -u > $IMAGES
+          echo "::set-output name=images::$(jq -R < $IMAGES | jq -sc)"
+
+  scan-charts:
+    needs: lint-and-test
+    if: inputs.scan-charts && fromJSON(needs.lint-and-test.outputs.charts)[0] != null
+    strategy:
+      matrix:
+        chart: ${{ fromJSON(needs.lint-and-test.outputs.charts) }}
+      fail-fast: false
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v1.1
+
+      - name: Template chart (${{ matrix.chart }})
+        run: helm template release ${{ matrix.chart }} --dry-run --replace --dependency-update > ${{ matrix.chart }}/k8s-manifest.yaml
+
+      - name: Run Snyk to check Kubernetes resources (${{ matrix.chart }})
+        uses: snyk/actions/iac@master
+        #continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.snyk-token }}
+        with:
+          file: ${{ matrix.chart }}/k8s-manifest.yaml
+          args: ${{ inputs.scan-chart-snyk-args }}
+
+      #- name: Upload result to GitHub Code Scanning
+      #  uses: github/codeql-action/upload-sarif@v1
+      #  with:
+      #    sarif_file: snyk.sarif
+
+  scan-images: # to ensure dependent images are still free of CVEs
+    needs: lint-and-test
+    if: inputs.scan-images && fromJSON(needs.lint-and-test.outputs.images)[0] != null
+    strategy:
+      matrix:
+        image: ${{ fromJSON(needs.lint-and-test.outputs.images) }}
+      fail-fast: false
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Check image name against scan-images-ignore-prefix-list
+        id: check-image-prefix
+        env:
+          IMAGE_PREFIXES_TO_IGNORE: ${{ inputs.scan-images-ignore-prefix-list }}
+          IMAGE_NAME: ${{ matrix.image }}
+        shell: python
+        run: |
+          import os
+          import json
+
+          imagesPrefixesToIgnore = json.loads(os.environ["IMAGE_PREFIXES_TO_IGNORE"])
+          imageName = os.environ["IMAGE_NAME"]
+
+          for prefix in imagesPrefixesToIgnore:
+              if imageName.startswith(prefix):
+                  print("Ignoring, found matching prefix", prefix)
+                  print("::set-output name=scan-image::false")
+                  exit(0)
+
+          print("::set-output name=scan-image::true")
+
+      - name: Run Snyk to check Docker image for vulnerabilities (${{ matrix.image }})
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.snyk-token }}
+        with:
+          image: ${{ matrix.image }}
+          args: ${{ inputs.scan-image-snyk-args }}
+        if: steps.check-image-prefix.outputs.scan-image == 'true'
