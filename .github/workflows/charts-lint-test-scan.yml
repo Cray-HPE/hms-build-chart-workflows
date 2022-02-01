@@ -8,6 +8,11 @@ on:
         type: string
         required: false
         default: ubuntu-latest
+      charts-base:
+        description: Base directory containing the the chart version directories.
+        type: string
+        required: false
+        default: charts
       lint-charts:
         description: Lint and test Helm charts
         type: boolean
@@ -106,13 +111,26 @@ jobs:
       - name: Configure chart-testing
         env:
           INPUTS_CT_CONFIG: ${{ inputs.ct-config }}
+          CHARTS_BASE: ${{ inputs.charts-base }}
         shell: bash
         run: |
           if [[ ! -f "$CT_CONFIG" ]]; then
             mkdir -p "$(dirname "$CT_CONFIG")"
             touch "$CT_CONFIG"
           fi
+          
+          echo "Original chart testing configuration"
+          cat $CT_CONFIG
+
+          for CHART_VERSION_PATH in $CHARTS_BASE/v*; do
+              echo "Adding chart version directory: ${CHART_VERSION_PATH}"
+              export CHART_VERSION_PATH="$CHART_VERSION_PATH"
+              yq eval --inplace -P '.chart-dirs |= . + [env(CHART_VERSION_PATH)]' "$CT_CONFIG"
+          done
+
           yq eval-all --inplace -P '. as $item ireduce ({}; . * $item )' "$CT_CONFIG" <(echo "target-branch: $GITHUB_BASE_REF") <(echo "$INPUTS_CT_CONFIG")
+
+          echo "Customized chart testing configuration"
           cat "$CT_CONFIG"
         if: inputs.lint-charts || inputs.test-charts
 
@@ -135,6 +153,45 @@ jobs:
       - name: Lint charts
         run: ct lint --config "$CT_CONFIG"
         if: inputs.lint-charts
+
+      - name: Verify applications versions between Chart.yaml and values.yaml match
+        shell: bash
+        env:
+          CHARTS_BASE: ${{ inputs.charts-base }}
+        run: |
+          for CHART_PATH in $CHARTS_BASE/v*/*; do
+            echo
+            echo "----------------------------------------"
+            echo "Verifying $CHART_PATH"
+            echo "----------------------------------------"
+            echo
+
+            CHART_YAML_PATH="$CHART_PATH/Chart.yaml"
+            if [[ ! -f "$CHART_YAML_PATH" ]]; then
+                echo "Error: Chart.yaml does not exist - $CHART_YAML_PATH"
+                exit 1
+            fi
+
+            CHART_VALUES_PATH="$CHART_PATH/values.yaml"
+            if [[ ! -f "$CHART_VALUES_PATH" ]]; then
+                echo "Error: values.yaml does not exist - $CHART_VALUES_PATH"
+                exit 1
+            fi
+
+            CHART_APP_VERSION=$(yq e .appVersion "$CHART_YAML_PATH")
+            VALUES_APP_VERSION=$(yq e .global.appVersion "$CHART_VALUES_PATH")
+            echo "Chart Application Version:  $CHART_APP_VERSION"
+            echo "Values Application Version: $VALUES_APP_VERSION"
+
+            if [[ "$CHART_APP_VERSION" == "$VALUES_APP_VERSION" ]]; then
+                echo "PASS: Application versions in Chart.yaml and values.yaml agree!"
+            else
+                echo "FAIL: Application versions in Chart.yaml and values.yaml do NOT agree!"
+                exit 1
+            fi
+          done
+        if: inputs.lint-charts
+
 
       - name: Run post-lint script
         shell: bash
