@@ -42,8 +42,8 @@ jobs:
         fetch-depth: 0
     
     - name: Generate build metadata
-      uses: Cray-HPE/hms-build-metadata-action@v1
-      id: build-suffix
+      uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@v1
+      id: build-meta
       with:
         stable-strategy: branch
         stable-branches-regex: ${{ inputs.target-branch }}  # Hack, for right now we will assume that we have 1 branch that is considered stable, as the build-changed-charts-action doesn't support
@@ -52,7 +52,7 @@ jobs:
       uses: Cray-HPE/hms-build-changed-charts-action@v1
       with:
         target-branch: ${{ inputs.target-branch }}
-        unstable-build-suffix: ${{ steps.build-suffix.outputs.helm }}
+        unstable-build-suffix: ${{ steps.build-meta.outputs.helm }}
 
     - name: Check for packaged charts
       id: packaged-charts
@@ -78,7 +78,7 @@ jobs:
         done
 
         git push origin --tags
-      if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true' && (steps.build-suffix.outputs.build-suffix == null)
+      if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true' && fromJSON(steps.build-meta.outputs.is-stable)
     
     - uses: jfrog/setup-jfrog-cli@v1
       env:
@@ -93,7 +93,7 @@ jobs:
       shell: bash
       env:
         ARTIFACTORY_REPO: csm-helm-charts
-        STABLE_BUILD: ${{ steps.build-suffix.outputs.build-suffix == null }}
+        STABLE_BUILD: ${{ fromJSON(steps.build-meta.outputs.is-stable) }}
         COMPONENT: ${{ inputs.artifactory-component }}
         CHARTS_PATH: ./.packaged
         CHARTS_PATTERN: "*.tgz"
