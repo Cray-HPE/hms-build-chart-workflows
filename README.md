@@ -75,8 +75,8 @@ The chart lint, test, and scan workflow located at `.github/workflows/charts_lin
 
 The workflow is composed of three jobs:
 1. The [Lint and Test job](#lint-and-test-job) will use chart-testing to lint any changed charts in the pull request, and if enabled deploy any changed Helm charts to a test Kubernetes cluster using Kind to run tests against.
-2. For each image detected in a changed chart a [Scan image job](#scan-image-job) will created to run Snyk against the image to find vulnerabilities.  
-3. For each changed chart a [Scan chart job](#scan-chart-job) will be created to run Snyk against the chart to fund vulnerabilities.
+2. **For each** image detected in a changed chart a [Scan image job](#scan-image-job) will created to run Snyk against the image to find vulnerabilities.  
+3. **For each** changed chart a [Scan chart job](#scan-chart-job) will be created to run Snyk against the chart to find vulnerabilities.
 
 ### Workflow inputs
 
