@@ -23,7 +23,9 @@ The hms-build-image-workflows repository contains Github Action workflows to fac
 The build and release charts workflow is composed of a single job that is used to package and publish Helm charts from a HMS Helm chart repository. Stable artifacts are produced when a PR or branch is merged to main. For all other pushes or PRs an unstable artifact is produced.
 
 At a high level this workflow performs the following actions:
-1. Build and package Helm charts. For non-main only changed charts (when compared to the main branch) are build. When on workflow run is triggered on the main branch to create a stable Helm chart, only the charts that have not been previously released will be built. 
+1. Build and package Helm charts.
+   1. Changes to the main branch will publish stable builds of the Helm charts that have not previously been released.
+   2. Changes to any other branch will publish unstable builds for the Helm charts that changed..
 2. If any new stable helm chart has been built, create a git tag in the form of `helm-chart-name-x.y.z` and push it to the repository.
    > In the HMS Chart repositories Git tags are used to keep track if a stable build of a Helm chart has been previously built. To rebuild or replace an already released Helm chart one can delete the Git tag, and then re-run the build and release charts workflow. 
 3. Upload any packaged Helm charts into the appropriate location within Artifactory.
@@ -75,7 +77,7 @@ The chart lint, test, and scan workflow located at `.github/workflows/charts_lin
 
 The workflow is composed of three jobs:
 1. The [Lint and Test job](#lint-and-test-job) will use chart-testing to lint any changed charts in the pull request, and if enabled deploy any changed Helm charts to a test Kubernetes cluster using Kind to run tests against.
-2. **For each** image detected in a changed chart a [Scan image job](#scan-image-job) will created to run Snyk against the image to find vulnerabilities.  
+2. **For each** image detected in a changed chart a [Scan image job](#scan-image-job) will be created to run Snyk against the image to find vulnerabilities.  
 3. **For each** changed chart a [Scan chart job](#scan-chart-job) will be created to run Snyk against the chart to find vulnerabilities.
 
 ### Workflow inputs
@@ -109,7 +111,7 @@ The workflow is composed of three jobs:
 
 ![](docs/charts_lint_test_scan/job_lint_and_test.svg)
 
-The lint and test job performs the following hight level actions when a pull request is opened:
+The lint and test job performs the following high level actions when a pull request is opened:
 1. Configures chart-testing to be aware of the Helm charts present in the repository by updating the `chart-dirs` field in the repos `ct.yaml` file.
    > **NOTE** The HMS chart repositories version charts by directories `charts/vX.Y` and allows for multiple versions of a chart to exist side by side. 
 2. Determine any charts that have been modified in the current branch when compared against the base branch of the PR that triggered the workflow run.
@@ -139,9 +141,9 @@ The update PR with comment job is composed of mostly 3rd part Github Actions
 
 ![](docs/charts_lint_test_scan/job_scan_charts.svg)
 
-A Scan chart job will be created for each chart that was change in a PR. It will template the Helm chart, and then use Snyk to scan the templated Kubenernetes resources for vulnerabilities. 
+A Scan chart job will be created for each chart that was changed in a PR. It will template the Helm chart, and then use Snyk to scan the templated Kubenernetes resources for vulnerabilities. 
 
-The container image will not be scan if it matches one of the prefixes specified in the `inputs.scan-images-ignore-prefix-list` input. We want to scan all images that one of Helm charts reference using Snyk, this option should only be used to support building legacy Helm charts targeted at CSM 1.0 or older. This is input is encoded as a JSON array of strings, with the default value of:
+The container image will not be scanned if it matches one of the prefixes specified in the `inputs.scan-images-ignore-prefix-list` input. We want to scan all images that one of Helm charts reference using Snyk, this option should only be used to support building legacy Helm charts targeted at CSM 1.0 or older. This input is encoded as a JSON array of strings, with the default value of:
 ```json
 ["dtr.dev.cray.com"]
 ```
