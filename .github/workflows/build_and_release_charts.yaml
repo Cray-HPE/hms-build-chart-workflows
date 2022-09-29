@@ -49,7 +49,7 @@ jobs:
         stable-branches-regex: ${{ inputs.target-branch }}  # Hack, for right now we will assume that we have 1 branch that is considered stable, as the build-changed-charts-action doesn't support
       
     - name: Build changed charts
-      uses: Cray-HPE/hms-build-changed-charts-action@v1
+      uses: Cray-HPE/hms-build-changed-charts-action@main
       with:
         target-branch: ${{ inputs.target-branch }}
         unstable-build-suffix: ${{ steps.build-meta.outputs.helm }}
