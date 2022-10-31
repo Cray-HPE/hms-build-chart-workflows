@@ -124,7 +124,7 @@ The update PR with comment job is composed of mostly 3rd part Github Actions
 - 3rd party Github Actions:
   - [actions/checkout@v2](https://github.com/actions/checkout/tree/v2)
   - [actions/setup-python@v2](https://github.com/actions/setup-python/tree/v2)
-  - [azure/setup-helm@v1.1](https://github.com/azure/setup-helm/tree/v1.1)
+  - [azure/setup-helm@v3](https://github.com/azure/setup-helm/tree/v3)
   - [helm/kind-action@v1.2.0](https://github.com/helm/kind-action/tree/v1.2.0)
 
 ### Scan image job
