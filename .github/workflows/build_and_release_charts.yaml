@@ -104,11 +104,14 @@ jobs:
         COMPONENT: ${{ inputs.artifactory-component }}
         CHARTS_PATH: ./.packaged
         CHARTS_PATTERN: "*.tgz"
-        JFROG_RT_UPLOAD_OPTS: ""
+        JFROG_RT_UPLOAD_OPTS: "--detailed-summary"
       run: |
+        # Change current directory to $CHARTS_PATH, other wise v2 of the jfrog CLI will add $CHARTS_PATH as a prefix.
+        cd $CHARTS_PATH
+        
         echo "Stable build: $STABLE_BUILD"
 
-        SOURCE_PATTERN="$CHARTS_PATH/$CHARTS_PATTERN";
+        SOURCE_PATTERN="$CHARTS_PATTERN";
         echo "Source pattern: $SOURCE_PATTERN";
 
         STABLE_PATH="unstable";
@@ -122,7 +125,7 @@ jobs:
         jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN"
 
         # Provide links for downloading
-        for packaged_chart in $(find .packaged -mindepth 1 -maxdepth 1); do
+        for packaged_chart in $(find . -mindepth 1 -maxdepth 1); do
           CHART_FILE_NAME=$(basename "$packaged_chart")
           echo "Download link: https://artifactory.algol60.net/artifactory/$TARGET_PATTERN$CHART_FILE_NAME"
         done
