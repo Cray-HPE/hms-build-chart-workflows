@@ -44,7 +44,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
     
@@ -87,7 +87,7 @@ jobs:
         git push origin --tags
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true' && fromJSON(steps.build-meta.outputs.is-stable)
     
-    - uses: jfrog/setup-jfrog-cli@v1
+    - uses: jfrog/setup-jfrog-cli@v3
       env:
         JF_ARTIFACTORY_1: ${{ secrets.ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION }}
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
