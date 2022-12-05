@@ -31,6 +31,13 @@ on:
       jfrog-cli-configuration:
         description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
         required: true
+
+      ARTIFACTORY_ALGOL60_READONLY_USERNAME:
+        description: Artifactory readonly username used to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+        required: true
+      ARTIFACTORY_ALGOL60_READONLY_TOKEN:
+        description: Artifactory readonly token for the given user to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+        required: true
 jobs:
   build_and_release:
     name: Build and Publish Helm charts
@@ -42,7 +49,7 @@ jobs:
         fetch-depth: 0
     
     - name: Generate build metadata
-      uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@v1
+      uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@CASMHMS-5597
       id: build-meta
       with:
         stable-strategy: branch
@@ -62,10 +69,10 @@ jobs:
       run: |
         if [[ -d "$CHARTS_PATH" ]]; then
           echo "Found packaged charts!"
-          echo "::set-output name=exists::true"
+          echo "exists=true" >> $GITHUB_OUTPUT
         else
           echo "No packaged charts found!"
-          echo "::set-output name=exists::false"        
+          echo "exists=false" >> $GITHUB_OUTPUT
         fi
  
     - name: Create Git tags for changed charts
