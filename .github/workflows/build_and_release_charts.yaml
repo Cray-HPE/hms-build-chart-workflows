@@ -28,7 +28,7 @@ on:
         default: true
 
     secrets:
-      jfrog-cli-configuration:
+      ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
         description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
         required: true
 
@@ -89,7 +89,7 @@ jobs:
     
     - uses: jfrog/setup-jfrog-cli@v1
       env:
-        JF_ARTIFACTORY_1: ${{ secrets.jfrog-cli-configuration }}
+        JF_ARTIFACTORY_1: ${{ secrets.ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION }}
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
 
     - name: Verify connectivity to Artifactory
