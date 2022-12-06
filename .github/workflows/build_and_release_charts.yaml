@@ -40,11 +40,35 @@ on:
         description: Job summary template
         type: string
         default: |
+          ## Build and publish charts
           👋  Hey! Here are the chart(s) we built for you:
           
+          | Chart | Download Link |
+          | ----- | ------------- |
+          {{- range $artifact := .jfrogPublish.files  }}
+          | {{ $artifact.source }} | [{{ $artifact.target }}]({{ $artifact.target }}) |
+          {{ end }}
+
           {{ if .isPullRequest }}
           *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
           {{ end }}
+
+          ## Build summary
+
+          ### Build metadata
+          | Key | Value | 
+          | --- | ----- |
+          | Artifactory Component | {{ .component }} |
+          | Stable Build | {{ .stableBuild }} |  
+          | Unstable Build Prefix | {{ .unableBuildSuffix }} |
+
+          ### Publish Helm charts results
+          | Key | Value | 
+          | --- | ----- |
+          | Status | {{ .jfrogPublish.status }} |
+          | Successfully uploaded charts count | {{ .jfrogPublish.totals.success }} |
+          | Failed uploaded charts count | {{ .jfrogPublish.totals.failure }} |
+
     secrets:
       ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
         description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
