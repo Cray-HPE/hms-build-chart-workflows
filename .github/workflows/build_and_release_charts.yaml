@@ -30,22 +30,21 @@ on:
         description: Control whether the update-pr-with-artifacts job runs on PR builds. Choose from true or false
         type: string
         required: false
-        default: |
-          👋  Hey! Here are the chart(s) we built for you:
-          
-          {{ if .isPRComment }}
-          *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
-          {{ end }}
+        default: true
       pr-comment-search:
         description: Text to find the comment created by the update-pr-with-artifacts job on PR builds.
         type: string
         required: false
         default: Here are the chart(s) we built for you
-
       job-summary-template:
         description: Job summary template
         type: string
-
+        default: |
+          👋  Hey! Here are the chart(s) we built for you:
+          
+          {{ if .isPullRequest }}
+          *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
+          {{ end }}
     secrets:
       ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
         description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
@@ -61,6 +60,8 @@ jobs:
   build_and_release:
     name: Build and Publish Helm charts
     runs-on: ${{ inputs.runs-on }}
+    outputs:
+      job-summary: ${{ steps.template.outputs.result }}
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -147,7 +148,7 @@ jobs:
         echo "Target pattern: $TARGET_PATTERN";
 
         # Upload to Artifactory
-        jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN" | tee ./temp/jfrog_publish_output.json"
+        jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN" | tee "${GITHUB_WORKSPACE}/temp/jfrog_publish_output.json"
 
         # Provide links for downloading
         for packaged_chart in $(find . -mindepth 1 -maxdepth 1); do
@@ -165,23 +166,26 @@ jobs:
         printenv JOB_SUMMARY_TEMPLATE > ./temp/job_summary_template.md
 
         # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
-        yq '{"jfrogPublish": .}' "./temp/jfrog_publish_output.json" -P > "./temp/job_summary_vars.yaml"
+        yq '{"jfrogPublish": .}' ./temp/jfrog_publish_output.json -P > ./temp/job_summary_vars.yaml
 
     - name: Render Job summary
       id: template
       uses: chuhlomin/render-template@v1.6
       with:
-        template: job_summary_template.md
+        template: ./temp/job_summary_template.md
         vars: |
           stableBuild: ${{ fromJSON(steps.build-meta.outputs.is-stable) }}
           component: ${{ inputs.artifactory-component }}
           unableBuildSuffix: ${{ steps.build-meta.outputs.helm }}
-        vars_path: "./temp/job_summary_vars.yaml"
-        result_path: "./temp/job_summary.md"
+
+          PRHeadSha: ${{ github.event.pull_request.head.sha }}
+          isPullRequest: ${{ github.event_name == 'pull_request' }}
+        vars_path: ./temp/job_summary_vars.yaml
+        result_path: ./temp/job_summary.md
 
     - name: Set job summary
       run: |
-        cat "./temp/job_summary.md" >> $GITHUB_STEP_SUMMARY
+        cat ./temp/job_summary.md >> $GITHUB_STEP_SUMMARY
 
   update-pr-with-artifacts:
     name: Update PR comment with artifacts
@@ -203,7 +207,7 @@ jobs:
       uses: peter-evans/create-or-update-comment@v2
       with:
         issue-number: ${{ github.event.pull_request.number }}
-        body: ${{ steps.template.outputs.result }}
+        body: ${{ needs.build_and_release.outputs.job-summary }}
         reactions: rocket
 
     - name: Update comment
@@ -211,5 +215,5 @@ jobs:
       uses: peter-evans/create-or-update-comment@v2
       with:
         comment-id: ${{ steps.fc.outputs.comment-id }}
-        body: ${{ steps.template.outputs.result }}
+        body: ${{ needs.build_and_release.outputs.job-summary }}
         edit-mode: replace
