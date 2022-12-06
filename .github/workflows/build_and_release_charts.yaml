@@ -67,6 +67,11 @@ jobs:
       with:
         fetch-depth: 0
     
+    - name: Create temp directory
+      shell: bash
+      run: |
+        mkdir ./temp
+
     - name: Generate build metadata
       uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@CASMHMS-5597
       id: build-meta
@@ -142,7 +147,7 @@ jobs:
         echo "Target pattern: $TARGET_PATTERN";
 
         # Upload to Artifactory
-        jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN" | tee "${{ runner.temp }}/jfrog_publish_output.json"
+        jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN" | tee ./temp/jfrog_publish_output.json"
 
         # Provide links for downloading
         for packaged_chart in $(find . -mindepth 1 -maxdepth 1); do
@@ -157,26 +162,26 @@ jobs:
         JOB_SUMMARY_TEMPLATE: ${{ inputs.job-summary-template }}
       run: |
         # Write out the job summary template to a file
-        printenv JOB_SUMMARY_TEMPLATE > "${{ runner.temp }}/job_summary_template.md"
+        printenv JOB_SUMMARY_TEMPLATE > ./temp/job_summary_template.md
 
         # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
-        yq '{"wrap": .}' "${{ runner.temp }}/jfrog_publish_output.json" -P > "${{ runner.temp }}/job_summary_vars.yaml"
+        yq '{"jfrogPublish": .}' "./temp/jfrog_publish_output.json" -P > "./temp/job_summary_vars.yaml"
 
     - name: Render Job summary
       id: template
       uses: chuhlomin/render-template@v1.6
       with:
-        template: "${{ runner.temp }}/job_summary_template.md"
+        template: job_summary_template.md
         vars: |
           stableBuild: ${{ fromJSON(steps.build-meta.outputs.is-stable) }}
           component: ${{ inputs.artifactory-component }}
           unableBuildSuffix: ${{ steps.build-meta.outputs.helm }}
-        vars_path: "${{ runner.temp }}/job_summary_vars.yaml"
-        result_path: "${{ runner.temp }}/job_summary.md"
+        vars_path: "./temp/job_summary_vars.yaml"
+        result_path: "./temp/job_summary.md"
 
     - name: Set job summary
       run: |
-        cat "${{ runner.temp }}/job_summary.md" >> $GITHUB_STEP_SUMMARY
+        cat "./temp/job_summary.md" >> $GITHUB_STEP_SUMMARY
 
   update-pr-with-artifacts:
     name: Update PR comment with artifacts
