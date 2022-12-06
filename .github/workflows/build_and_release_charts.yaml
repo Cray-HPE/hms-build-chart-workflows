@@ -36,6 +36,42 @@ on:
         type: string
         required: false
         default: Here are the chart(s) we built for you
+      pr-comment-template:
+        description: PR comment template
+        type: string
+        default: |
+          👋  Hey! Here are the chart(s) we built for you:
+          
+          | Chart | Download Link |
+          | ----- | ------------- |
+          {{- range $artifact := .jfrogPublish.files  }}
+          | {{ $artifact.source }} | [{{ $artifact.target }}]({{ $artifact.target }}) |
+          {{ end }}
+
+          {{ if .isPullRequest }}
+          *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
+          {{ end }}
+
+          <details>
+          <summary>Build summary</summary>
+          <br />
+          
+          ### Build metadata
+          | Key | Value | 
+          | --- | ----- |
+          | Artifactory Component | {{ .component }} |
+          | Stable Build | {{ .stableBuild }} |  
+          | Unstable Build Prefix | {{ .unstableBuildSuffix }} |
+
+          ### Publish Helm charts results
+          | Key | Value | 
+          | --- | ----- |
+          | Status | {{ .jfrogPublish.status }} |
+          | Successfully uploaded charts count | {{ .jfrogPublish.totals.success }} |
+          | Failed uploaded charts count | {{ .jfrogPublish.totals.failure }} |
+
+          </details>
+
       job-summary-template:
         description: Job summary template
         type: string
@@ -60,7 +96,7 @@ on:
           | --- | ----- |
           | Artifactory Component | {{ .component }} |
           | Stable Build | {{ .stableBuild }} |  
-          | Unstable Build Prefix | {{ .unableBuildSuffix }} |
+          | Unstable Build Prefix | {{ .unstableBuildSuffix }} |
 
           ### Publish Helm charts results
           | Key | Value | 
@@ -85,7 +121,9 @@ jobs:
     name: Build and Publish Helm charts
     runs-on: ${{ inputs.runs-on }}
     outputs:
-      job-summary: ${{ steps.template.outputs.result }}
+      jfrog-publish-output: ${{ steps.publish.outputs.jfrog-publish-output }}
+      unable-build-suffix: ${{ steps.build-meta.outputs.helm }}
+      is-stable: ${{ steps.build-meta.outputs.is-stable }}
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -187,7 +225,10 @@ jobs:
 
         # Upload to Artifactory
         jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN" | tee "${GITHUB_WORKSPACE}/temp/jfrog_publish_output.json"
-
+ 
+        # Save jfrog output
+        echo "jfrog-publish-output=$(cat "${GITHUB_WORKSPACE}/temp/jfrog_publish_output.json" | jq -c)" >> $GITHUB_OUTPUT
+ 
         # Provide links for downloading
         for packaged_chart in $(find . -mindepth 1 -maxdepth 1); do
           CHART_FILE_NAME=$(basename "$packaged_chart")
@@ -214,7 +255,7 @@ jobs:
         vars: |
           stableBuild: ${{ fromJSON(steps.build-meta.outputs.is-stable) }}
           component: ${{ inputs.artifactory-component }}
-          unableBuildSuffix: ${{ steps.build-meta.outputs.helm }}
+          unstableBuildSuffix: ${{ steps.build-meta.outputs.helm }}
 
           PRHeadSha: ${{ github.event.pull_request.head.sha }}
           isPullRequest: ${{ github.event_name == 'pull_request' }}
@@ -232,6 +273,34 @@ jobs:
     needs:
       - build_and_release
     steps:
+    - name: PR comment prep
+      shell: bash
+      env:
+        PR_COMMENT_TEMPLATE: ${{ inputs.pr-comment-template }}
+        JFROG_PUBLISH_OUTPUT: ${{ needs.build_and_release.outputs.jfrog-publish-output }}
+      run: |
+        # Write out the job summary template to a file
+        printenv PR_COMMENT_TEMPLATE > ./pr_comment_template.md
+
+        # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
+        printenv JFROG_PUBLISH_OUTPUT > ./jfrog_publish_output.json
+        yq '{"jfrogPublish": .}' ./jfrog_publish_output.json -P > ./pr_comment_vars.yaml
+
+    - name: Render PR comment summary
+      id: template
+      uses: chuhlomin/render-template@v1.6
+      with:
+        template: ./pr_comment_template.md
+        vars: |
+          stableBuild: ${{ fromJSON(needs.build_and_release.outputs.is-stable) }}
+          component: ${{ inputs.artifactory-component }}
+          unstableBuildSuffix: ${{ needs.build_and_release.outputs.unable-build-suffix }}
+
+
+          PRHeadSha: ${{ github.event.pull_request.head.sha }}
+          isPullRequest: ${{ github.event_name == 'pull_request' }}
+        vars_path: ./pr_comment_vars.yaml
+
     - name: Find Comment
       uses: peter-evans/find-comment@v2
       id: fc
@@ -245,7 +314,7 @@ jobs:
       uses: peter-evans/create-or-update-comment@v2
       with:
         issue-number: ${{ github.event.pull_request.number }}
-        body: ${{ needs.build_and_release.outputs.job-summary }}
+        body: ${{ steps.template.outputs.result }}
         reactions: rocket
 
     - name: Update comment
@@ -253,5 +322,5 @@ jobs:
       uses: peter-evans/create-or-update-comment@v2
       with:
         comment-id: ${{ steps.fc.outputs.comment-id }}
-        body: ${{ needs.build_and_release.outputs.job-summary }}
+        body: ${{ steps.template.outputs.result }}
         edit-mode: replace
