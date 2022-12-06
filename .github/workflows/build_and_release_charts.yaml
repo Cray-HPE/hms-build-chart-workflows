@@ -97,6 +97,20 @@ jobs:
       run: |
         mkdir ./temp
 
+    - name: Setup helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.10.2
+
+    - name: Login to Artifactory helm chart repo
+      shell: bash
+      env:
+        ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
+        ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+        ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
+      run: |
+        printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+
     - name: Generate build metadata
       uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@CASMHMS-5597
       id: build-meta
@@ -149,7 +163,7 @@ jobs:
       id: publish
       shell: bash
       env:
-        ARTIFACTORY_REPO: csm-helm-charts
+        ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
         STABLE_BUILD: ${{ fromJSON(steps.build-meta.outputs.is-stable) }}
         COMPONENT: ${{ inputs.artifactory-component }}
         CHARTS_PATH: ./.packaged
