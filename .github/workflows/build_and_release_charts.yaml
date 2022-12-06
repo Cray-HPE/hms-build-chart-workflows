@@ -156,6 +156,7 @@ jobs:
       env:
         JOB_SUMMARY_TEMPLATE: ${{ inputs.job-summary-template }}
       run: |
+        # Write out the job summary template to a file
         printenv JOB_SUMMARY_TEMPLATE > "${{ runner.temp }}/job_summary_template.md"
 
         # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
