@@ -334,6 +334,11 @@ jobs:
           username: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
           password: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
 
+      - name: Pull Docker image
+        shell: bash
+        run: |
+          docker pull ${{ matrix.image }}
+
       - name: Run Snyk to check Docker image for vulnerabilities (${{ matrix.image }})
         uses: snyk/actions/docker@master
         env:
