@@ -334,10 +334,14 @@ jobs:
           username: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
           password: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
 
+      # Looks like Snyk action is running within a docker container, and for some reason its unable to use 
+      # the credentials provided to docker via "docker login". To work around this the image of interest can 
+      # be pre-pulled and it will be available to snyk to scan.
       - name: Pull Docker image
         shell: bash
         run: |
           docker pull ${{ matrix.image }}
+        if: steps.check-image-prefix.outputs.scan-image == 'true'
 
       - name: Run Snyk to check Docker image for vulnerabilities (${{ matrix.image }})
         uses: snyk/actions/docker@master
