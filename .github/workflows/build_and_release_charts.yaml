@@ -46,7 +46,7 @@ on:
           | ----- | ------------- |
           {{- range $artifact := .jfrogPublish.files  }}
           | {{ $artifact.source }} | [{{ $artifact.target }}]({{ $artifact.target }}) |
-          {{ end }}
+          {{- end }}
 
           {{ if .isPullRequest }}
           *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
@@ -83,7 +83,7 @@ on:
           | ----- | ------------- |
           {{- range $artifact := .jfrogPublish.files  }}
           | {{ $artifact.source }} | [{{ $artifact.target }}]({{ $artifact.target }}) |
-          {{ end }}
+          {{- end }}
 
           {{ if .isPullRequest }}
           *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
