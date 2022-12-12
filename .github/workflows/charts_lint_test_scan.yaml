@@ -279,6 +279,15 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: ${{ inputs.helm-version }}
+      
+      - name: Login to Artifactory helm chart repo
+        shell: bash
+        env:
+          ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
+          ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+          ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
+        run: |
+          printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
 
       - name: Template chart (${{ matrix.chart }})
         run: helm template release ${{ matrix.chart }} --dry-run --replace --dependency-update > ${{ matrix.chart }}/k8s-manifest.yaml
