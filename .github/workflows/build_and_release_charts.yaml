@@ -244,6 +244,18 @@ jobs:
         # Write out the job summary template to a file
         printenv JOB_SUMMARY_TEMPLATE > ./temp/job_summary_template.md
 
+        if [[ ! -f "./temp/jfrog_publish_output.json" ]]; then
+          # No charts were published, lets put a empty json file here for the template.
+          echo '{
+            "status": "No charts to publish",
+            "totals": {
+              "success": 0,
+              "failure": 0
+            },
+            "files": []
+          }' > ./temp/jfrog_publish_output.json
+        fi
+
         # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
         yq '{"jfrogPublish": .}' ./temp/jfrog_publish_output.json -P > ./temp/job_summary_vars.yaml
 
@@ -283,8 +295,22 @@ jobs:
         # Write out the job summary template to a file
         printenv PR_COMMENT_TEMPLATE > ./pr_comment_template.md
 
+        # Retrieve the jfrog cli output
+        if [[ -z "$JFROG_PUBLISH_OUTPUT" ]]; then
+          # No charts were published, lets put a empty json file here for the template.
+          echo '{
+            "status": "No charts to publish",
+            "totals": {
+              "success": 0,
+              "failure": 0
+            },
+            "files": []
+          }' > ./jfrog_publish_output.json
+        else
+          printenv JFROG_PUBLISH_OUTPUT > ./jfrog_publish_output.json
+        fi
+
         # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
-        printenv JFROG_PUBLISH_OUTPUT > ./jfrog_publish_output.json
         yq '{"jfrogPublish": .}' ./jfrog_publish_output.json -P > ./pr_comment_vars.yaml
 
     - name: Render PR comment summary
