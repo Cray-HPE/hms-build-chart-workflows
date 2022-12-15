@@ -150,14 +150,14 @@ jobs:
         printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
 
     - name: Generate build metadata
-      uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@CASMHMS-5597
+      uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@v1
       id: build-meta
       with:
         stable-strategy: branch
         stable-branches-regex: ${{ inputs.target-branch }}  # Hack, for right now we will assume that we have 1 branch that is considered stable, as the build-changed-charts-action doesn't support
       
     - name: Build changed charts
-      uses: Cray-HPE/hms-build-changed-charts-action@CASMHMS-5597
+      uses: Cray-HPE/hms-build-changed-charts-action@v1
       with:
         target-branch: ${{ inputs.target-branch }}
         unstable-build-suffix: ${{ steps.build-meta.outputs.helm }}
