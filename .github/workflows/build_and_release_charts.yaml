@@ -26,21 +26,129 @@ on:
         type: boolean
         required: false
         default: true
+      enable-pr-comment:
+        description: Control whether the update-pr-with-artifacts job runs on PR builds. Choose from true or false
+        type: string
+        required: false
+        default: true
+      pr-comment-search:
+        description: Text to find the comment created by the update-pr-with-artifacts job on PR builds.
+        type: string
+        required: false
+        default: Here are the chart(s) we built for you
+      pr-comment-template:
+        description: PR comment template
+        type: string
+        default: |
+          👋  Hey! Here are the chart(s) we built for you:
+          
+          | Chart | Download Link |
+          | ----- | ------------- |
+          {{- range $artifact := .jfrogPublish.files  }}
+          | {{ $artifact.source }} | [{{ $artifact.target }}]({{ $artifact.target }}) |
+          {{- end }}
+
+          {{ if .isPullRequest }}
+          *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
+          {{ end }}
+
+          <details>
+          <summary>Build summary</summary>
+          <br />
+          
+          ### Build metadata
+          | Key | Value | 
+          | --- | ----- |
+          | Artifactory Component | {{ .component }} |
+          | Stable Build | {{ .stableBuild }} |  
+          | Unstable Build Prefix | {{ .unstableBuildSuffix }} |
+
+          ### Publish Helm charts results
+          | Key | Value | 
+          | --- | ----- |
+          | Status | {{ .jfrogPublish.status }} |
+          | Successfully uploaded charts count | {{ .jfrogPublish.totals.success }} |
+          | Failed uploaded charts count | {{ .jfrogPublish.totals.failure }} |
+
+          </details>
+
+      job-summary-template:
+        description: Job summary template
+        type: string
+        default: |
+          ## Build and publish charts
+          👋  Hey! Here are the chart(s) we built for you:
+          
+          | Chart | Download Link |
+          | ----- | ------------- |
+          {{- range $artifact := .jfrogPublish.files  }}
+          | {{ $artifact.source }} | [{{ $artifact.target }}]({{ $artifact.target }}) |
+          {{- end }}
+
+          {{ if .isPullRequest }}
+          *Note*: this SHA is the merge of {{ .PRHeadSha }} and the PR base branch. Good luck and make rocket go now! 🌮 🚀
+          {{ end }}
+
+          ## Build summary
+
+          ### Build metadata
+          | Key | Value | 
+          | --- | ----- |
+          | Artifactory Component | {{ .component }} |
+          | Stable Build | {{ .stableBuild }} |  
+          | Unstable Build Prefix | {{ .unstableBuildSuffix }} |
+
+          ### Publish Helm charts results
+          | Key | Value | 
+          | --- | ----- |
+          | Status | {{ .jfrogPublish.status }} |
+          | Successfully uploaded charts count | {{ .jfrogPublish.totals.success }} |
+          | Failed uploaded charts count | {{ .jfrogPublish.totals.failure }} |
 
     secrets:
-      jfrog-cli-configuration:
+      ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
         description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
+        required: true
+
+      ARTIFACTORY_ALGOL60_READONLY_USERNAME:
+        description: Artifactory readonly username used to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+        required: true
+      ARTIFACTORY_ALGOL60_READONLY_TOKEN:
+        description: Artifactory readonly token for the given user to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
         required: true
 jobs:
   build_and_release:
     name: Build and Publish Helm charts
     runs-on: ${{ inputs.runs-on }}
+    outputs:
+      jfrog-publish-output: ${{ steps.publish.outputs.jfrog-publish-output }}
+      unable-build-suffix: ${{ steps.build-meta.outputs.helm }}
+      is-stable: ${{ steps.build-meta.outputs.is-stable }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
     
+    - name: Create temp directory
+      shell: bash
+      run: |
+        mkdir ./temp
+
+    - name: Setup helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.10.2
+
+    - name: Login to Artifactory helm chart repo
+      shell: bash
+      env:
+        ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
+        ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+        ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
+      run: |
+        printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+
     - name: Generate build metadata
       uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@v1
       id: build-meta
@@ -62,10 +170,10 @@ jobs:
       run: |
         if [[ -d "$CHARTS_PATH" ]]; then
           echo "Found packaged charts!"
-          echo "::set-output name=exists::true"
+          echo "exists=true" >> $GITHUB_OUTPUT
         else
           echo "No packaged charts found!"
-          echo "::set-output name=exists::false"        
+          echo "exists=false" >> $GITHUB_OUTPUT
         fi
  
     - name: Create Git tags for changed charts
@@ -80,9 +188,9 @@ jobs:
         git push origin --tags
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true' && fromJSON(steps.build-meta.outputs.is-stable)
     
-    - uses: jfrog/setup-jfrog-cli@v1
+    - uses: jfrog/setup-jfrog-cli@v3
       env:
-        JF_ARTIFACTORY_1: ${{ secrets.jfrog-cli-configuration }}
+        JF_ENV_1: ${{ secrets.ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION }}
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
 
     - name: Verify connectivity to Artifactory
@@ -90,18 +198,22 @@ jobs:
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
 
     - name: Publish Helm charts
+      id: publish
       shell: bash
       env:
-        ARTIFACTORY_REPO: csm-helm-charts
+        ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
         STABLE_BUILD: ${{ fromJSON(steps.build-meta.outputs.is-stable) }}
         COMPONENT: ${{ inputs.artifactory-component }}
         CHARTS_PATH: ./.packaged
         CHARTS_PATTERN: "*.tgz"
-        JFROG_RT_UPLOAD_OPTS: ""
+        JFROG_RT_UPLOAD_OPTS: "--detailed-summary"
       run: |
+        # Change current directory to $CHARTS_PATH, other wise v2 of the jfrog CLI will add $CHARTS_PATH as a prefix.
+        cd $CHARTS_PATH
+        
         echo "Stable build: $STABLE_BUILD"
 
-        SOURCE_PATTERN="$CHARTS_PATH/$CHARTS_PATTERN";
+        SOURCE_PATTERN="$CHARTS_PATTERN";
         echo "Source pattern: $SOURCE_PATTERN";
 
         STABLE_PATH="unstable";
@@ -112,13 +224,131 @@ jobs:
         echo "Target pattern: $TARGET_PATTERN";
 
         # Upload to Artifactory
-        jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN"
-
+        jfrog rt upload $JFROG_RT_UPLOAD_OPTS "$SOURCE_PATTERN" "$TARGET_PATTERN" | tee "${GITHUB_WORKSPACE}/temp/jfrog_publish_output.json"
+ 
+        # Save jfrog output
+        echo "jfrog-publish-output=$(cat "${GITHUB_WORKSPACE}/temp/jfrog_publish_output.json" | jq -c)" >> $GITHUB_OUTPUT
+ 
         # Provide links for downloading
-        for packaged_chart in $(find .packaged -mindepth 1 -maxdepth 1); do
+        for packaged_chart in $(find . -mindepth 1 -maxdepth 1); do
           CHART_FILE_NAME=$(basename "$packaged_chart")
           echo "Download link: https://artifactory.algol60.net/artifactory/$TARGET_PATTERN$CHART_FILE_NAME"
         done
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
 
+    - name: Job summary prep
+      shell: bash
+      env:
+        JOB_SUMMARY_TEMPLATE: ${{ inputs.job-summary-template }}
+      run: |
+        # Write out the job summary template to a file
+        printenv JOB_SUMMARY_TEMPLATE > ./temp/job_summary_template.md
 
+        if [[ ! -f "./temp/jfrog_publish_output.json" ]]; then
+          # No charts were published, lets put a empty json file here for the template.
+          echo '{
+            "status": "No charts to publish",
+            "totals": {
+              "success": 0,
+              "failure": 0
+            },
+            "files": []
+          }' > ./temp/jfrog_publish_output.json
+        fi
+
+        # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
+        yq '{"jfrogPublish": .}' ./temp/jfrog_publish_output.json -P > ./temp/job_summary_vars.yaml
+
+    - name: Render Job summary
+      id: template
+      uses: chuhlomin/render-template@v1.6
+      with:
+        template: ./temp/job_summary_template.md
+        # Note the vars below cannot have dashes '-' in them
+        vars: |
+          stableBuild: ${{ fromJSON(steps.build-meta.outputs.is-stable) }}
+          component: ${{ inputs.artifactory-component }}
+          unstableBuildSuffix: ${{ steps.build-meta.outputs.helm }}
+
+          PRHeadSha: ${{ github.event.pull_request.head.sha }}
+          isPullRequest: ${{ github.event_name == 'pull_request' }}
+        vars_path: ./temp/job_summary_vars.yaml
+        result_path: ./temp/job_summary.md
+
+    - name: Set job summary
+      run: |
+        cat ./temp/job_summary.md >> $GITHUB_STEP_SUMMARY
+
+  update-pr-with-artifacts:
+    name: Update PR comment with artifacts
+    runs-on: ${{ inputs.runs-on }}
+    if: ${{ fromJSON(inputs.enable-pr-comment) && github.event_name == 'pull_request' }}
+    needs:
+      - build_and_release
+    steps:
+    - name: PR comment prep
+      shell: bash
+      env:
+        PR_COMMENT_TEMPLATE: ${{ inputs.pr-comment-template }}
+        JFROG_PUBLISH_OUTPUT: ${{ needs.build_and_release.outputs.jfrog-publish-output }}
+      run: |
+        # Write out the job summary template to a file
+        printenv PR_COMMENT_TEMPLATE > ./pr_comment_template.md
+
+        # Retrieve the jfrog cli output
+        if [[ -z "$JFROG_PUBLISH_OUTPUT" ]]; then
+          # No charts were published, lets put a empty json file here for the template.
+          echo '{
+            "status": "No charts to publish",
+            "totals": {
+              "success": 0,
+              "failure": 0
+            },
+            "files": []
+          }' > ./jfrog_publish_output.json
+        else
+          printenv JFROG_PUBLISH_OUTPUT > ./jfrog_publish_output.json
+        fi
+
+        # Convert the output of the jfrog CLI to yaml to make it work easier with the render-template action.
+        yq '{"jfrogPublish": .}' ./jfrog_publish_output.json -P > ./pr_comment_vars.yaml
+
+    - name: Render PR comment summary
+      id: template
+      uses: chuhlomin/render-template@v1.6
+      with:
+        template: ./pr_comment_template.md
+        # Note the vars below cannot have dashes '-' in them
+        vars: |
+          stableBuild: ${{ fromJSON(needs.build_and_release.outputs.is-stable) }}
+          component: ${{ inputs.artifactory-component }}
+          unstableBuildSuffix: ${{ needs.build_and_release.outputs.unable-build-suffix }}
+
+
+          PRHeadSha: ${{ github.event.pull_request.head.sha }}
+          isPullRequest: ${{ github.event_name == 'pull_request' }}
+        vars_path: ./pr_comment_vars.yaml
+
+    - name: Find Comment
+      uses: peter-evans/find-comment@v2
+      id: fc
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: "${{ inputs.pr-comment-search }}"
+     
+    - name: Create comment
+      if: steps.fc.outputs.comment-id == ''
+      uses: peter-evans/create-or-update-comment@v2
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        body: ${{ steps.template.outputs.result }}
+        reactions: rocket
+
+    - name: Update comment
+      if: steps.fc.outputs.comment-id != ''
+      uses: peter-evans/create-or-update-comment@v2
+      with:
+        comment-id: ${{ steps.fc.outputs.comment-id }}
+        body: ${{ steps.template.outputs.result }}
+        edit-mode: replace
