@@ -81,7 +81,7 @@ on:
         required: false
         default: v3.10.2
       artifactory-repo:
-        description: Repository in Artifactory to publish Helm charts to.
+        description: Repository in Artifactory to pull Helm charts from.
         type: string
         required: false
         default: csm-helm-charts
