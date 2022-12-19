@@ -96,6 +96,7 @@ The PR comment Markdown template is expected to exist at `.github/build-image-co
 
 
 The following table shows what template variables are currently exposed by this job when a comment template is rendered:
+
 | Variable                      | Example                                                            |
 | ----------------------------- | ------------------------------------------------------------------ |
 | `stableBuild`                 | `false`                                                            |
