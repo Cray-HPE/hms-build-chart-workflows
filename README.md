@@ -150,6 +150,8 @@ The workflow is composed of three jobs:
 2. **For each** image detected in a changed chart a [Scan image job](#scan-image-job) will be created to run Snyk against the image to find vulnerabilities.  
 3. **For each** changed chart a [Scan chart job](#scan-chart-job) will be created to run Snyk against the chart to find vulnerabilities.
 
+
+
 ### Workflow inputs
 
 | Name                             | Data Type | Required Field | Default value          | Description
@@ -252,6 +254,28 @@ jobs:
     secrets:
       snyk-token: ${{ secrets.SNYK_TOKEN }}
 ```
+
+## Kubernetes API checker
+
+The k8s api checker workflow located at `.github/workflows/k8s_api_checker.yaml` in this repository will scan the Helm chart for deprecated k8s APIs on PRs and branch pushes. The workflow by default will run against only the chart version for which files were changed.
+
+### Workflow inputs
+
+| Name                             | Data Type | Required Field | Default value          | Description
+| -------------------------------- | --------- | -------------- | ---------------------- | -----------
+| `chart-versions`                 | `string`  | Optional       | ``                     | The list of charts to check under the `charts` directory. example: `["v2.0","v2.1"]`
+| `check-all-charts`               | `boolean` | Optional       | `false`                | Set to `true` to run the checker against all chart versions
+| `ignore-errors`                  | `boolean` | Optional       | `false`                | Set to `true` to make the job always pass. It will still create reports on the results.
+| `artifactory-repo`               | `string`  | Optional       | `csm-helm-charts`      | Repository in Artifactory to pull Helm charts from.
+
+### Workflow secrets
+
+| Name                                          | Required Field | Description
+| --------------------------------------------- | -------------- | -----------
+| `ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION` | Required       | JFrog CLI configuration with permissions to upload artifacts to Artifactory.
+| `ARTIFACTORY_ALGOL60_READONLY_USERNAME`       | Required       | Artifactory readonly username used to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+| `ARTIFACTORY_ALGOL60_READONLY_TOKEN`          | Required       | Artifactory readonly token for the given user to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+
 ## Release model
 
 When you make changes you should tag the code branch with an vX.Y.Z semver and move/create the vX tag.
