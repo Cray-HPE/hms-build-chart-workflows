@@ -22,6 +22,11 @@ on:
         type: string
         required: false
         default: ''
+      component-versions:
+        description: The k8s, cert-manager, and other versions. The default is to use the latest versions. Example k8s=v1.21.0,cert-manager=v0.14.1
+        type: string
+        required: false
+        default: ''
 
     secrets:
       ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
@@ -126,6 +131,8 @@ jobs:
     needs: k8s-api-checker-setup
     if: ${{ needs.k8s-api-checker-setup.outputs.chart_versions_json != '[]' }}
     strategy:
+      # fail-fast=false causes the steps to be run for every entry in martix.chart_version
+      # instead of quiting on the first failure
       fail-fast: false
       matrix:
         chart_version: ${{ fromJSON(needs.k8s-api-checker-setup.outputs.chart_versions_json) }}
@@ -143,6 +150,7 @@ jobs:
           fail-on-removed: true
           enable-pr-comment: false
           chart-directory: chart-build
+          PLUTO_COMPONENT_VERSIONS: ${{ inputs.component-versions }}
           prerequisite: |
             CHART_VERSION=${{ matrix.chart_version }}
             # There should be only one directory under charts/$CHART_VERSION/
@@ -152,31 +160,62 @@ jobs:
             helm dependency update $CHART_DIR
             helm template --generate-name --dry-run $CHART_DIR > chart-build/chart-template.yaml
 
-      - name: Render Job summary
-        if: success() || failure()
+      - name: Render Job Failure Summary
+        if: failure()
         shell: bash
         run: |
           set -x
-          echo "# ${{ matrix.chart_version }} Kubernetes Deprecated APIs" >> $GITHUB_STEP_SUMMARY
-          echo "# ${{ matrix.chart_version }} Kubernetes Deprecated APIs" > pr-comment.txt
+          MESSAGE="# ${{ matrix.chart_version }} Kubernetes Deprecated APIs"
+          echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+          echo "$MESSAGE" > pr-comment.txt
           if [[ -f "comment.txt" ]]; then
               cat comment.txt >> $GITHUB_STEP_SUMMARY
               cat comment.txt >> pr-comment.txt
           else
-              echo "ERROR: missing expected file: comment.txt" >> $GITHUB_STEP_SUMMARY
-              echo "ERROR: missing expected file: comment.txt" >> pr-comment.txt
+              MESSAGE='ERROR: Missing the expected file `comment.txt`. This file should have been created by the action `Cray-HPE/.github/actions/csm-k8s-api-checker`'
+              echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+              echo "$MESSAGE" >> pr-comment.txt
               exit 1
           fi
 
+      - name: Render Job Success Summary
+        if: success()
+        shell: bash
+        run: |
+          set -x
+          MESSAGE="# ${{ matrix.chart_version }} Kubernetes Deprecated APIs"
+          echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+          echo "$MESSAGE" >> pr-comment.txt
+          if [[ "${{ inputs.ignore-errors }}" == "true" && -f "comment.txt" ]]; then
+              # This case is where the csm-k8s-api-checker tool created
+              # comment.txt and likely found deprecated APIs, but it passed
+              # because we told it to ignore errors.
+              # This case causes the PR comment to be created.
+              cat comment.txt >> $GITHUB_STEP_SUMMARY
+              cat comment.txt >> pr-comment.txt
+              echo "make_pr_comment=true" >> $GITHUB_ENV
+          else
+              MESSAGE="No deprecated APIs found."
+              echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+              echo "$MESSAGE" >> pr-comment.txt
+              if [[ -f "comment.txt" ]]; then
+                  MESSAGE="## Additional Comments"
+                  echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+                  echo "$MESSAGE" >> pr-comment.txt
+                  cat comment.txt >> $GITHUB_STEP_SUMMARY
+                  cat comment.txt >> pr-comment.txt
+              fi
+          fi
+
       - name: Comment on PR
-        if: failure()
+        if: failure() || env.make_pr_comment == 'true'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: hms-csm-k8s-api-checker-${{ matrix.chart_version }}
           path: pr-comment.txt
 
       - name: Delete Comment on PR if successful
-        if: success()
+        if: success() && env.make_pr_comment != 'true'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: hms-csm-k8s-api-checker-${{ matrix.chart_version }}
