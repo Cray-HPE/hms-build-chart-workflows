@@ -150,8 +150,6 @@ The workflow is composed of three jobs:
 2. **For each** image detected in a changed chart a [Scan image job](#scan-image-job) will be created to run Snyk against the image to find vulnerabilities.  
 3. **For each** changed chart a [Scan chart job](#scan-chart-job) will be created to run Snyk against the chart to find vulnerabilities.
 
-
-
 ### Workflow inputs
 
 | Name                             | Data Type | Required Field | Default value          | Description
