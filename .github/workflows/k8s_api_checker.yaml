@@ -165,7 +165,7 @@ jobs:
         shell: bash
         run: |
           set -x
-          MESSAGE="# ${{ matrix.chart_version }} Kubernetes Deprecated APIs"
+          MESSAGE="# Deprecated Kubernetes APIs - Chart Version ${{ matrix.chart_version }}"
           echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
           echo "$MESSAGE" > pr-comment.txt
           if [[ -f "comment.txt" ]]; then
