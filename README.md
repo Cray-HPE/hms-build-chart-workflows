@@ -263,6 +263,7 @@ The k8s api checker workflow located at `.github/workflows/k8s_api_checker.yaml`
 | -------------------------------- | --------- | -------------- | ---------------------- | -----------
 | `chart-versions`                 | `string`  | Optional       | ``                     | The list of charts to check under the `charts` directory. example: `["v2.0","v2.1"]`
 | `check-all-charts`               | `boolean` | Optional       | `false`                | Set to `true` to run the checker against all chart versions
+| `component-versions`             | `string`  | Optional       | ``                     | The k8s, cert-manager, and other versions to test with. Example `k8s=v1.21.0,cert-manager=v0.14.1`. The default is to use the latest versions.
 | `ignore-errors`                  | `boolean` | Optional       | `false`                | Set to `true` to make the job always pass. It will still create reports on the results.
 | `artifactory-repo`               | `string`  | Optional       | `csm-helm-charts`      | Repository in Artifactory to pull Helm charts from.
 
