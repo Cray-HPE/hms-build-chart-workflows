@@ -1,0 +1,223 @@
+name: Kubernetes API Checker
+on:
+  workflow_call:
+    inputs:
+      artifactory-repo:
+        description: Repository in Artifactory to publish Helm charts to.
+        type: string
+        required: false
+        default: csm-helm-charts
+      ignore-errors:
+        description: If true the workflow will be marked as green even if the checker fails.
+        type: boolean
+        required: false
+        default: false
+      check-all-charts:
+        description: Set to true to check all charts
+        type: boolean
+        required: false
+        default: false
+      chart-versions:
+        description: An array of chart versions to run against.
+        type: string
+        required: false
+        default: ''
+      component-versions:
+        description: The k8s, cert-manager, and other versions. The default is to use the latest versions. Example k8s=v1.21.0,cert-manager=v0.14.1
+        type: string
+        required: false
+        default: ''
+
+    secrets:
+      ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
+        description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
+        required: true
+      ARTIFACTORY_ALGOL60_READONLY_USERNAME:
+        description: Artifactory readonly username used to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+        required: true
+      ARTIFACTORY_ALGOL60_READONLY_TOKEN:
+        description: Artifactory readonly token for the given user to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+        required: true
+jobs:
+  k8s-api-checker-setup:
+    name: Kubernetes API Checker Setup
+    runs-on: ubuntu-20.04
+    outputs:
+      chart_versions_json: ${{ steps.get-chart-versions.outputs.CHART_VERSIONS_JSON }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.10.2
+
+      - name: Login to Artifactory helm chart repo
+        shell: bash
+        env:
+          ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
+          ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+          ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
+        run: |
+          printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+
+      - name: Determine chart versions
+        id: get-chart-versions
+        shell: bash
+        env:
+          CHECK_ALL_CHARTS: ${{ inputs.check-all-charts }}
+          CHART_VERSIONS: ${{ inputs.chart-versions }}
+        run: |
+          set -x
+          echo "CHECK_ALL_CHARTS: $CHECK_ALL_CHARTS"
+          echo "CHART_VERSIONS: $CHART_VERSIONS"
+
+          VERSIONS_JSON="[]"
+
+          if [[ -z "${{github.base_ref}}" ]]; then
+              TARGET_BRANCH="origin/main"
+          else
+              TARGET_BRANCH="origin/${{github.base_ref}}"
+          fi
+
+          git merge-base --is-ancestor "${{github.sha}}" $TARGET_BRANCH || is_ancestor=$?
+          if [[ $is_ancestor -eq 0 ]]; then
+              # The target branch contains HEAD, so check all charts.
+              CHECK_ALL_CHARTS="true"
+          fi
+
+          if [[ "$CHECK_ALL_CHARTS" == "true" ]]; then
+              echo "Find all chart versions"
+              pushd charts
+
+              # Find the all the chart versions under the charts/ directory
+              # For example, with a charts directory containing v2.0, v2.1, and v10.0,
+              # the VERSIONS_SORTED field will contain:
+              # 002 000 v2.0
+              # 002 001 v2.1
+              # 010 000 v10.0
+              VERSIONS_SORTED=$(ls -d v* | awk --field-separator='.' '{ printf("%03d %03d %s\n", substr($1,2),  $2, $0) }' | sort)
+
+              # VERSION_LIST contains the versions separated by newlines. For example:
+              # v2.0
+              # v2.1
+              # v10.0
+              VERSIONS_LIST=$(echo "$VERSIONS_SORTED" | awk '{ print $3 }')
+
+              # VERSIONS_JSON contains a json array. For example: ["v2.0","v2.1","v10.0"]
+              VERSIONS_JSON=$(echo "$VERSIONS_LIST" | jq -Rnc "[inputs]")
+
+              popd
+          elif [[ -z "$CHART_VERSIONS" ]]; then
+              echo "Check for changed charts"
+
+              GIT_DIFF_FILE_STATUS=$(git diff --name-status $TARGET_BRANCH)
+              CHANGED_VERSIONS=$(echo "$GIT_DIFF_FILE_STATUS" | grep -v '^D' | awk '{print $(NF)}' | grep '^charts/' | awk -F "/" '{print $2}' |  grep '^v' | uniq)
+              if [[ ! -z "$CHANGED_VERSIONS" ]]; then
+                  VERSIONS_JSON=$(echo "$CHANGED_VERSIONS" | jq -Rnc "[inputs]")
+              fi
+          else
+              echo "Use user supplied chart version array"
+              VERSIONS_JSON=$CHART_VERSIONS
+          fi
+
+          echo "CHART_VERSIONS_JSON=$VERSIONS_JSON" >> $GITHUB_OUTPUT
+
+  k8s-api-checker:
+    name: Kubernetes API Checker
+    runs-on: ubuntu-20.04
+    needs: k8s-api-checker-setup
+    if: ${{ needs.k8s-api-checker-setup.outputs.chart_versions_json != '[]' }}
+    strategy:
+      # fail-fast=false causes the steps to be run for every entry in martix.chart_version
+      # instead of quiting on the first failure
+      fail-fast: false
+      matrix:
+        chart_version: ${{ fromJSON(needs.k8s-api-checker-setup.outputs.chart_versions_json) }}
+
+    steps:
+      - name: Check for removed and deprecated k8s APIs
+        id: k8s-checker
+        if: ${{ always() }}
+        uses: Cray-HPE/.github/actions/csm-k8s-api-checker@v0-csm-k8s-api-checker
+        env:
+          CONTINUE_ON_ERROR: ${{inputs.ignore-errors}}
+        continue-on-error: ${{ fromJSON(env.CONTINUE_ON_ERROR) }}
+        with:
+          fail-on-deprecated: true
+          fail-on-removed: true
+          enable-pr-comment: false
+          chart-directory: chart-build
+          PLUTO_COMPONENT_VERSIONS: ${{ inputs.component-versions }}
+          prerequisite: |
+            CHART_VERSION=${{ matrix.chart_version }}
+            # There should be only one directory under charts/$CHART_VERSION/
+            CHART_DIR=$(ls -d charts/$CHART_VERSION/* | tail -1)
+
+            mkdir -p chart-build
+            helm dependency update $CHART_DIR
+            helm template --generate-name --dry-run $CHART_DIR > chart-build/chart-template.yaml
+
+      - name: Render Job Failure Summary
+        if: failure()
+        shell: bash
+        run: |
+          set -x
+          MESSAGE="# Deprecated Kubernetes APIs - Chart Version ${{ matrix.chart_version }}"
+          echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+          echo "$MESSAGE" > pr-comment.txt
+          if [[ -f "comment.txt" ]]; then
+              cat comment.txt >> $GITHUB_STEP_SUMMARY
+              cat comment.txt >> pr-comment.txt
+          else
+              MESSAGE='ERROR: Missing the expected file `comment.txt`. This file should have been created by the action `Cray-HPE/.github/actions/csm-k8s-api-checker`'
+              echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+              echo "$MESSAGE" >> pr-comment.txt
+              exit 1
+          fi
+
+      - name: Render Job Success Summary
+        if: success()
+        shell: bash
+        run: |
+          set -x
+          MESSAGE="# ${{ matrix.chart_version }} Kubernetes Deprecated APIs"
+          echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+          echo "$MESSAGE" >> pr-comment.txt
+          if [[ "${{ inputs.ignore-errors }}" == "true" && -f "comment.txt" ]]; then
+              # This case is where the csm-k8s-api-checker tool created
+              # comment.txt and likely found deprecated APIs, but it passed
+              # because we told it to ignore errors.
+              # This case causes the PR comment to be created.
+              cat comment.txt >> $GITHUB_STEP_SUMMARY
+              cat comment.txt >> pr-comment.txt
+              echo "make_pr_comment=true" >> $GITHUB_ENV
+          else
+              MESSAGE="No deprecated APIs found."
+              echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+              echo "$MESSAGE" >> pr-comment.txt
+              if [[ -f "comment.txt" ]]; then
+                  MESSAGE="## Additional Comments"
+                  echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
+                  echo "$MESSAGE" >> pr-comment.txt
+                  cat comment.txt >> $GITHUB_STEP_SUMMARY
+                  cat comment.txt >> pr-comment.txt
+              fi
+          fi
+
+      - name: Comment on PR
+        if: failure() || env.make_pr_comment == 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: hms-csm-k8s-api-checker-${{ matrix.chart_version }}
+          path: pr-comment.txt
+
+      - name: Delete Comment on PR if successful
+        if: success() && env.make_pr_comment != 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: hms-csm-k8s-api-checker-${{ matrix.chart_version }}
+          delete: true
+
