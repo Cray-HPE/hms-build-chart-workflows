@@ -82,10 +82,12 @@ jobs:
               TARGET_BRANCH="origin/${{github.base_ref}}"
           fi
 
-          git merge-base --is-ancestor "${{github.sha}}" $TARGET_BRANCH || is_ancestor=$?
-          if [[ $is_ancestor -eq 0 ]]; then
-              # The target branch contains HEAD, so check all charts.
-              CHECK_ALL_CHARTS="true"
+          if git merge-base --is-ancestor "${{github.sha}}" $TARGET_BRANCH; then
+              # The target branch already contains the current commit, so check
+              # all charts by default unless the caller specified a list of versions.
+              if [[ -z "$CHART_VERSIONS" ]]; then
+                  CHECK_ALL_CHARTS="true"
+              fi
           fi
 
           if [[ "$CHECK_ALL_CHARTS" == "true" ]]; then
@@ -113,8 +115,23 @@ jobs:
           elif [[ -z "$CHART_VERSIONS" ]]; then
               echo "Check for changed charts"
 
+              # The idiom ( grep "" || true ) is used because grep has a
+              # non zero exit when it doesn't find a match. A non zero exit
+              # causes the workflow to fail.
               GIT_DIFF_FILE_STATUS=$(git diff --name-status $TARGET_BRANCH)
-              CHANGED_VERSIONS=$(echo "$GIT_DIFF_FILE_STATUS" | grep -v '^D' | awk '{print $(NF)}' | grep '^charts/' | awk -F "/" '{print $2}' |  grep '^v' | uniq)
+              MODIFIED_OR_ADDED_FILES=$(
+                  echo "$GIT_DIFF_FILE_STATUS" |
+                  ( grep -v '^D' || true ) |
+                  awk '{print $(NF)}' )
+              CHART_FILES=$(
+                  echo "$MODIFIED_OR_ADDED_FILES" |
+                  ( grep '^charts/' || true ) )
+              CHANGED_VERSIONS=$(
+                  echo "$CHART_FILES" |
+                  awk -F "/" '{print $2}' |
+                  ( grep '^v' || true ) |
+                  uniq)
+
               if [[ ! -z "$CHANGED_VERSIONS" ]]; then
                   VERSIONS_JSON=$(echo "$CHANGED_VERSIONS" | jq -Rnc "[inputs]")
               fi
@@ -183,7 +200,7 @@ jobs:
         shell: bash
         run: |
           set -x
-          MESSAGE="# ${{ matrix.chart_version }} Kubernetes Deprecated APIs"
+          MESSAGE="# Deprecated Kubernetes APIs - Chart Version ${{ matrix.chart_version }}"
           echo "$MESSAGE" >> $GITHUB_STEP_SUMMARY
           echo "$MESSAGE" >> pr-comment.txt
           if [[ "${{ inputs.ignore-errors }}" == "true" && -f "comment.txt" ]]; then
