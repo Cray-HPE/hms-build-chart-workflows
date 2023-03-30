@@ -54,15 +54,6 @@ jobs:
         with:
           version: v3.10.2
 
-      - name: Login to Artifactory helm chart repo
-        shell: bash
-        env:
-          ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
-          ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
-          ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
-        run: |
-          printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
-
       - name: Determine chart versions
         id: get-chart-versions
         shell: bash
@@ -161,6 +152,9 @@ jobs:
         uses: Cray-HPE/.github/actions/csm-k8s-api-checker@v0-csm-k8s-api-checker
         env:
           CONTINUE_ON_ERROR: ${{inputs.ignore-errors}}
+          ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
+          ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+          ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
         continue-on-error: ${{ fromJSON(env.CONTINUE_ON_ERROR) }}
         with:
           fail-on-deprecated: true
@@ -174,6 +168,7 @@ jobs:
             CHART_DIR=$(ls -d charts/$CHART_VERSION/* | tail -1)
 
             mkdir -p chart-build
+            printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
             helm dependency update $CHART_DIR
             helm template --generate-name --dry-run $CHART_DIR > chart-build/chart-template.yaml
 
