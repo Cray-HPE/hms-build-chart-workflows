@@ -17,6 +17,18 @@ on:
         type: string
         required: false
         default: csm-helm-charts
+      additional-artifactory-repos:
+        description: |
+          Additional Artifactory repositories to configuring using 'helm repo add'
+          Example value:
+          [
+            "csm-helm-charts"
+          ]
+
+        type: string
+        required: false
+        default: '[]'
+      
       artifactory-component:
         description: The component is used to sort helm charts from the same repo internally in Artifactory. 
         type: string
@@ -147,7 +159,18 @@ jobs:
         ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
         ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
       run: |
-        printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+        printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add "${ARTIFACTORY_REPO}" "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+
+    - name: Login to additional Artifactory helm chart repositories
+      shell: bash
+      env:
+        ADDITIONAL_ARTIFACTORY_REPOS: ${{ inputs.additional-artifactory-repos }}
+        ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+        ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
+      run: |
+        for HELM_REPO in $(jq -n 'env.ADDITIONAL_ARTIFACTORY_REPOS | fromjson[]' -r); do
+          printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add "${HELM_REPO}"" "https://artifactory.algol60.net/artifactory/${HELM_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+        done
 
     - name: Generate build metadata
       uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@v1
