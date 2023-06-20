@@ -17,6 +17,18 @@ on:
         type: string
         required: false
         default: csm-helm-charts
+      artifactory-repo-ignore-add-failure:
+        description: |
+          Ignore failures when adding the artifactory repo using "helm repo add".
+          
+          This setting is useful when trying to populate an empty helm chart repo in artifactory, as it doesn't have an 
+          index.yaml file generated when there are no charts present. This will skip the step and the workflow should be 
+          able to complete and push the first chart into the repo. 
+
+          This flag should be set to false for normal use cases.  
+        type: boolean
+        required: false
+        default: false
       additional-artifactory-repos:
         description: |
           Additional Artifactory repositories to configuring using 'helm repo add'
@@ -154,6 +166,7 @@ jobs:
 
     - name: Login to Artifactory helm chart repo
       shell: bash
+      continue-on-error: ${{ inputs.artifactory-repo-ignore-add-failure }}
       env:
         ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
         ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
