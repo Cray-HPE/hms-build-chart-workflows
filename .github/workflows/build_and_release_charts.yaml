@@ -17,6 +17,30 @@ on:
         type: string
         required: false
         default: csm-helm-charts
+      artifactory-repo-ignore-add-failure:
+        description: |
+          Ignore failures when adding the artifactory repo using "helm repo add".
+          
+          This setting is useful when trying to populate an empty helm chart repo in artifactory, as it doesn't have an 
+          index.yaml file generated when there are no charts present. This will skip the step and the workflow should be 
+          able to complete and push the first chart into the repo. 
+
+          This flag should be set to false for normal use cases.  
+        type: boolean
+        required: false
+        default: false
+      additional-artifactory-repos:
+        description: |
+          Additional Artifactory repositories to add using 'helm repo add' for read only access. This is an JSON array of stings.
+          Example value:
+          [
+            "csm-helm-charts"
+          ]
+
+        type: string
+        required: false
+        default: '[]'
+      
       artifactory-component:
         description: The component is used to sort helm charts from the same repo internally in Artifactory. 
         type: string
@@ -106,8 +130,11 @@ on:
           | Failed uploaded charts count | {{ .jfrogPublish.totals.failure }} |
 
     secrets:
-      ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
-        description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
+      ARTIFACTORY_ALGOL60_USERNAME:
+        description: Artifactory username used for uploading Helm charts into Artifactory
+        required: true
+      ARTIFACTORY_ALGOL60_TOKEN:
+        description: Artifactory token used for uploading Helm charts into Artifactory
         required: true
 
       ARTIFACTORY_ALGOL60_READONLY_USERNAME:
@@ -142,12 +169,24 @@ jobs:
 
     - name: Login to Artifactory helm chart repo
       shell: bash
+      continue-on-error: ${{ inputs.artifactory-repo-ignore-add-failure }}
       env:
         ARTIFACTORY_REPO: ${{ inputs.artifactory-repo }}
         ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
         ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
       run: |
-        printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add cray-algol60 "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+        printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add "${ARTIFACTORY_REPO}" "https://artifactory.algol60.net/artifactory/${ARTIFACTORY_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+
+    - name: Login to additional Artifactory helm chart repositories
+      shell: bash
+      env:
+        ADDITIONAL_ARTIFACTORY_REPOS: ${{ inputs.additional-artifactory-repos }}
+        ARTIFACTORY_ALGOL60_READONLY_USERNAME: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
+        ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
+      run: |
+        for HELM_REPO in $(jq -n 'env.ADDITIONAL_ARTIFACTORY_REPOS | fromjson[]' -r); do
+          printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add "${HELM_REPO}" "https://artifactory.algol60.net/artifactory/${HELM_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+        done
 
     - name: Generate build metadata
       uses: Cray-HPE/hms-build-metadata-action/generate-build-metadata@v1
@@ -190,7 +229,9 @@ jobs:
     
     - uses: jfrog/setup-jfrog-cli@v3
       env:
-        JF_ENV_1: ${{ secrets.ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION }}
+        JF_URL: https://artifactory.algol60.net
+        JF_USER: ${{ secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+        JF_ACCESS_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
 
     - name: Verify connectivity to Artifactory
