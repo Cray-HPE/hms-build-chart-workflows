@@ -182,7 +182,7 @@ jobs:
         ARTIFACTORY_ALGOL60_READONLY_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_TOKEN }}
       run: |
         for HELM_REPO in $(jq -n 'env.ADDITIONAL_ARTIFACTORY_REPOS | fromjson[]' -r); do
-          printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add "${HELM_REPO}"" "https://artifactory.algol60.net/artifactory/${HELM_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
+          printenv ARTIFACTORY_ALGOL60_READONLY_TOKEN | helm repo add "${HELM_REPO}" "https://artifactory.algol60.net/artifactory/${HELM_REPO}" --username "$ARTIFACTORY_ALGOL60_READONLY_USERNAME" --password-stdin
         done
 
     - name: Generate build metadata
