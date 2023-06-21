@@ -130,8 +130,11 @@ on:
           | Failed uploaded charts count | {{ .jfrogPublish.totals.failure }} |
 
     secrets:
-      ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION:
-        description: JFrog CLI configuration with permissions to upload artifacts to Artifactory
+      ARTIFACTORY_ALGOL60_USERNAME:
+        description: Artifactory username used for uploading Helm charts into Artifactory
+        required: true
+      ARTIFACTORY_ALGOL60_TOKEN:
+        description: Artifactory token used for uploading Helm charts into Artifactory
         required: true
 
       ARTIFACTORY_ALGOL60_READONLY_USERNAME:
@@ -226,7 +229,9 @@ jobs:
     
     - uses: jfrog/setup-jfrog-cli@v3
       env:
-        JF_ENV_1: ${{ secrets.ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION }}
+        JF_URL: https://artifactory.algol60.net
+        JF_USER: ${{ secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+        JF_PASSWORD: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
 
     - name: Verify connectivity to Artifactory
