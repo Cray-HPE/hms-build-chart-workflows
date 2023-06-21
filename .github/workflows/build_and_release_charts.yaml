@@ -231,7 +231,7 @@ jobs:
       env:
         JF_URL: https://artifactory.algol60.net
         JF_USER: ${{ secrets.ARTIFACTORY_ALGOL60_USERNAME }}
-        JF_PASSWORD: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
+        JF_ACCESS_TOKEN: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
       if: inputs.enable-publish && steps.packaged-charts.outputs.exists == 'true'
 
     - name: Verify connectivity to Artifactory
