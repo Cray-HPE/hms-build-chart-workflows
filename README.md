@@ -27,24 +27,27 @@ The workflow is composed to two jobs.
 2. The [Update PR with comment job](#update-pr-with-comment-job) will run if the workflow was triggered from PR event, and will create or update a comment on the PR with links to artifacts produced by the workflow run.
 
 ### Workflow inputs
-| Name                    | Data Type | Required Field | Default value     | Description
-| ----------------------- | --------- | -------------- | ----------------- | -----------
-| `runs-on`               | `string`  | Required       | `ubuntu-latest`   | The type of machine to run the job on.
-| `target-branch`         | `string`  | Optional       | `master`          | Git repository branch to check against when determining charts that have changed.
-| `artifactory-repo`      | `string`  | Optional       | `csm-helm-charts` | Repository in Artifactory to publish Helm charts to.
-| `artifactory-component` | `string`  | Required       |                   | The component is used to sort helm charts from the same repo internally in Artifactory.
-| `enable-publish`        | `boolean` | Optional       | `true`            | Control the ability for this workflow to publish artifacts to Artifactory and create Git tags.
-| `enable-pr-comment`     | `boolean` | Optional       | `true`            | Control whether the update-pr-with-artifacts job runs on PR builds. Choose from true or false.
-| `pr-comment-search`     | `string`  | Optional       | `Here are the chart(s) we built for you` | String to look for when searching for an existing comment on a PR.
-| `pr-comment-template`   | `string`  | Optional       |                   | String containing the template to generate the PR comment with. Templated with the [Go templated language](https://pkg.go.dev/html/template).
-| `job-summary-template`  | `string`  | Optional       |                   | String containing the template to generate the job summary with. Templated with the [Go templated language](https://pkg.go.dev/html/template).
+| Name                                  | Data Type | Required Field | Default value     | Description
+| ------------------------------------- | --------- | -------------- | ----------------- | -----------
+| `runs-on`                             | `string`  | Required       | `ubuntu-latest`   | The type of machine to run the job on.
+| `target-branch`                       | `string`  | Optional       | `master`          | Git repository branch to check against when determining charts that have changed.
+| `artifactory-repo`                    | `string`  | Optional       | `csm-helm-charts` | Repository in Artifactory to publish Helm charts to.
+| `artifactory-repo-ignore-add-failure` | `boolean` | Optional | `false` | Ignore failures when adding the artifactory repo using "helm repo add". This setting is useful when trying to populate an empty helm chart repo in artifactory, as it doesn't have an index.yaml file generated when there are no charts present. This will skip the step and the workflow should be able to complete and push the first chart into the repo. 
+| `additional-artifactory-repos`        | `string`  | Optional       | `[]`              | Additional Artifactory repositories to add using 'helm repo add' for read only access. This is an JSON array of strings. Example value: `["csm-helm-charts"]`
+| `artifactory-component`               | `string`  | Required       |                   | The component is used to sort helm charts from the same repo internally in Artifactory.
+| `enable-publish`                      | `boolean` | Optional       | `true`            | Control the ability for this workflow to publish artifacts to Artifactory and create Git tags.
+| `enable-pr-comment`                   | `boolean` | Optional       | `true`            | Control whether the update-pr-with-artifacts job runs on PR builds. Choose from true or false.
+| `pr-comment-search`                   | `string`  | Optional       | `Here are the chart(s) we built for you` | String to look for when searching for an existing comment on a PR.
+| `pr-comment-template`                 | `string`  | Optional       |                   | String containing the template to generate the PR comment with. Templated with the [Go templated language](https://pkg.go.dev/html/template).
+| `job-summary-template`                | `string`  | Optional       |                   | String containing the template to generate the job summary with. Templated with the [Go templated language](https://pkg.go.dev/html/template).
 
 ### Workflow secrets
-| Name                                          | Required Field | Description 
-| --------------------------------------------- | -------------- | ----------- 
-| `ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION` | Required       | JFrog CLI configuration with permissions to upload artifacts to Artifactory.
-| `ARTIFACTORY_ALGOL60_READONLY_USERNAME`       | Required       | Artifactory readonly username used to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
-| `ARTIFACTORY_ALGOL60_READONLY_TOKEN`          | Required       | Artifactory readonly token for the given user to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+| Name                                    | Required Field | Description 
+| --------------------------------------- | -------------- | ----------- 
+| `ARTIFACTORY_ALGOL60_USERNAME`          | Required       | Artifactory username used for uploading Helm charts into Artifactory
+| `ARTIFACTORY_ALGOL60_TOKEN`             | Required       | Artifactory token used for uploading Helm charts into Artifactory
+| `ARTIFACTORY_ALGOL60_READONLY_USERNAME` | Required       | Artifactory readonly username used to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
+| `ARTIFACTORY_ALGOL60_READONLY_TOKEN`    | Required       | Artifactory readonly token for the given user to download helm charts. Note these credentials are not used to upload artifacts to artifactory.
 
 ### Build and release job
 

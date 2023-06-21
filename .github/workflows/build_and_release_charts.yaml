@@ -31,7 +31,7 @@ on:
         default: false
       additional-artifactory-repos:
         description: |
-          Additional Artifactory repositories to configuring using 'helm repo add'
+          Additional Artifactory repositories to add using 'helm repo add' for read only access. This is an JSON array of stings.
           Example value:
           [
             "csm-helm-charts"
