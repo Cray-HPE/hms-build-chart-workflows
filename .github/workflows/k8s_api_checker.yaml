@@ -140,7 +140,7 @@ jobs:
 
   k8s-api-checker:
     name: Kubernetes API Checker
-    runs-on: ubuntu-20.04
+    runs-on: ${{ inputs.runs-on }}
     needs: k8s-api-checker-setup
     if: ${{ needs.k8s-api-checker-setup.outputs.chart_versions_json != '[]' }}
     strategy:
