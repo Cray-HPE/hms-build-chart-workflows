@@ -151,6 +151,14 @@ jobs:
         chart_version: ${{ fromJSON(needs.k8s-api-checker-setup.outputs.chart_versions_json) }}
 
     steps:
+      - name: Install self-hosted runner dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            podman
+
+        if: ${{ inputs.runs-on == 'self-hosted' }}
       - name: Check for removed and deprecated k8s APIs
         id: k8s-checker
         if: ${{ always() }}
