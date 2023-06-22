@@ -2,6 +2,11 @@ name: Kubernetes API Checker
 on:
   workflow_call:
     inputs:
+      runs-on:
+        description: The type of machine to run the job on.
+        type: string
+        required: false
+        default: ubuntu-latest
       artifactory-repo:
         description: Repository in Artifactory to publish Helm charts to.
         type: string
@@ -41,7 +46,7 @@ on:
 jobs:
   k8s-api-checker-setup:
     name: Kubernetes API Checker Setup
-    runs-on: ubuntu-20.04
+    runs-on: ${{ inputs.runs-on }}
     outputs:
       chart_versions_json: ${{ steps.get-chart-versions.outputs.CHART_VERSIONS_JSON }}
     steps:
