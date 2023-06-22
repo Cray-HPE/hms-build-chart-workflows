@@ -111,6 +111,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install self-hosted runner dependencies
+        shell: bash
+        run: |
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq
+          sudo mv /tmp/yq /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          yq --version
+
+        if: ${{ inputs.runs-on == 'self-hosted' }}
+
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
