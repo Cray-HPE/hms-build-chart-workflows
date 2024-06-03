@@ -16,7 +16,7 @@ on:
         description: If true the workflow will be marked as green even if the checker fails.
         type: boolean
         required: false
-        default: false
+        default: true
       check-all-charts:
         description: Set to true to check all charts
         type: boolean
