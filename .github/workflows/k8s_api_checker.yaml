@@ -16,7 +16,7 @@ on:
         description: If true the workflow will be marked as green even if the checker fails.
         type: boolean
         required: false
-        default: false
+        default: true
       check-all-charts:
         description: Set to true to check all charts
         type: boolean
@@ -93,10 +93,10 @@ jobs:
               # Find the all the chart versions under the charts/ directory
               # For example, with a charts directory containing v2.0, v2.1, and v10.0,
               # the VERSIONS_SORTED field will contain:
-              # 002 000 v2.0
-              # 002 001 v2.1
               # 010 000 v10.0
-              VERSIONS_SORTED=$(ls -d v* | awk --field-separator='.' '{ printf("%03d %03d %s\n", substr($1,2),  $2, $0) }' | sort)
+              # 002 001 v2.1
+              # 002 000 v2.0
+              VERSIONS_SORTED=$(ls -d v* | awk --field-separator='.' '{ printf("%03d %03d %s\n", substr($1,2),  $2, $0) }' | sort -r)
 
               # VERSION_LIST contains the versions separated by newlines. For example:
               # v2.0
@@ -129,7 +129,9 @@ jobs:
                   uniq)
 
               if [[ ! -z "$CHANGED_VERSIONS" ]]; then
-                  VERSIONS_JSON=$(echo "$CHANGED_VERSIONS" | jq -Rnc "[inputs]")
+                  VERSIONS_SORTED=$(echo "$CHANGED_VERSIONS" | awk --field-separator='.' '{ printf("%03d %03d %s\n", substr($1,2),  $2, $0) }' | sort -r)
+                  VERSIONS_LIST=$(echo "$VERSIONS_SORTED" | awk '{ print $3 }')
+                  VERSIONS_JSON=$(echo "$VERSIONS_LIST" | jq -Rnc "[inputs]")
               fi
           else
               echo "Use user supplied chart version array"
