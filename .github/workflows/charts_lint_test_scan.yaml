@@ -139,7 +139,7 @@ jobs:
       # yamllint (https://github.com/adrienverge/yamllint) which require Python
       - uses: actions/setup-python@v4
         with:
-          python-version: 3.7
+          python-version: 3.13
         if: inputs.lint-charts || inputs.test-charts
 
       - name: Set up chart-testing
