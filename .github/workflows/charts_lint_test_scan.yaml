@@ -107,7 +107,7 @@ jobs:
       CT_CONFIG: ${{ inputs.ct-yaml }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -283,7 +283,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Set up Helm
         uses: azure/setup-helm@v3
@@ -353,7 +353,7 @@ jobs:
           writeOutput("scan-image", "true")
 
       - name: Login to algol60 Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: artifactory.algol60.net
           username: ${{ secrets.ARTIFACTORY_ALGOL60_READONLY_USERNAME }}
