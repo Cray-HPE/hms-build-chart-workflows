@@ -82,7 +82,7 @@ The build and release charts workflow is composed of various 3rd party and inter
   - [Cray-HPE/hms-build-changed-charts-action@v1](https://github.com/Cray-HPE/hms-build-changed-charts-action/tree/v1)
 
 - 3rd party Github Actions:
-  - [actions/checkout@v3](https://github.com/actions/checkout/tree/v3)
+  - [actions/checkout@v6](https://github.com/actions/checkout/tree/v6)
   - [jfrog/setup-jfrog-cli@v3](https://github.com/jfrog/setup-jfrog-cli/tree/v3)
   - [chuhlomin/render-template@v1.6](https://github.com/chuhlomin/render-template/tree/v1.6)
 
@@ -199,7 +199,7 @@ The lint and test job performs the following high level actions when a pull requ
 
 The update PR with comment job is composed of mostly 3rd part Github Actions
 - 3rd party Github Actions:
-  - [actions/checkout@v3](https://github.com/actions/checkout/tree/v3)
+  - [actions/checkout@v6](https://github.com/actions/checkout/tree/v6)
   - [actions/setup-python@v4](https://github.com/actions/setup-python/tree/v4)
   - [azure/setup-helm@v3](https://github.com/azure/setup-helm/tree/v3)
   - [helm/kind-action@v1.2.0](https://github.com/helm/kind-action/tree/v1.2.0)
@@ -213,7 +213,7 @@ A Scan image job will be created for each detected container detected from a cha
 The update PR with comment job is composed of mostly 3rd party Github Actions
 - 3rd party Github Actions:
   - [snyk/actions/docker@master](https://github.com/snyk/actions/tree/master/docker)
-  - [docker/login-action@v2](https://github.com/docker/login-action/tree/v2)
+  - [docker/login-action@v3](https://github.com/docker/login-action/tree/v3)
 
 ### Scan chart job
 
@@ -228,7 +228,7 @@ The container image will not be scanned if it matches one of the prefixes specif
 
 The update PR with comment job is composed of mostly 3rd party Github Actions
 - 3rd party Github Actions:
-  - [actions/checkout@v2](https://github.com/actions/checkout/tree/v2)
+  - [actions/checkout@v6](https://github.com/actions/checkout/tree/v6)
   - [azure/setup-helm@v1.1](https://github.com/azure/setup-helm/tree/v1.1)
   - [snyk/actions/iac@master](https://github.com/snyk/actions/tree/master/iac)
 
